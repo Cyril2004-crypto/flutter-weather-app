@@ -2,11 +2,19 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/weather_model.dart';
 import '../services/weather_service.dart';
+import '../utils/temperature_utils.dart';
 import 'login_screen.dart';
 
 // Main Weather Screen with Event-Driven Programming
 class WeatherScreen extends StatefulWidget {
-  const WeatherScreen({super.key});
+  final VoidCallback onThemeToggle;
+  final bool isDarkMode;
+  
+  const WeatherScreen({
+    super.key,
+    required this.onThemeToggle,
+    required this.isDarkMode,
+  });
 
   @override
   State<WeatherScreen> createState() => _WeatherScreenState();
@@ -21,6 +29,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   String _errorMessage = '';
   String _username = '';
   String _savedCity = '';
+  bool _isCelsius = true; // Temperature unit preference
 
   @override
   void initState() {
@@ -34,6 +43,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
     setState(() {
       _username = prefs.getString('username') ?? 'User';
       _savedCity = prefs.getString('preferredCity') ?? 'London';
+      _isCelsius = prefs.getBool('isCelsius') ?? true;
     });
     
     // Load weather for saved city
@@ -84,6 +94,15 @@ class _WeatherScreenState extends State<WeatherScreen> {
     }
   }
 
+  // Toggle temperature unit (°C ↔ °F)
+  _toggleTemperatureUnit() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isCelsius = !_isCelsius;
+    });
+    await prefs.setBool('isCelsius', _isCelsius);
+  }
+
   // Logout function (Virtual Identity)
   _logout() async {
     final prefs = await SharedPreferences.getInstance();
@@ -91,7 +110,10 @@ class _WeatherScreenState extends State<WeatherScreen> {
     
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        MaterialPageRoute(builder: (context) => LoginScreen(
+          onThemeToggle: widget.onThemeToggle,
+          isDarkMode: widget.isDarkMode,
+        )),
       );
     }
   }
@@ -99,12 +121,22 @@ class _WeatherScreenState extends State<WeatherScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue.shade50,
       appBar: AppBar(
-        title: Text('Welcome, '),
-        backgroundColor: Colors.blue.shade600,
-        foregroundColor: Colors.white,
+        title: Text('Welcome, $_username'),
         actions: [
+          // Temperature unit toggle
+          IconButton(
+            icon: Icon(_isCelsius ? Icons.device_thermostat : Icons.thermostat_outlined),
+            onPressed: _toggleTemperatureUnit,
+            tooltip: _isCelsius ? 'Switch to Fahrenheit' : 'Switch to Celsius',
+          ),
+          // Theme toggle
+          IconButton(
+            icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            onPressed: widget.onThemeToggle,
+            tooltip: widget.isDarkMode ? 'Light Mode' : 'Dark Mode',
+          ),
+          // Logout button
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
@@ -124,6 +156,24 @@ class _WeatherScreenState extends State<WeatherScreen> {
                   padding: const EdgeInsets.all(15.0),
                   child: Column(
                     children: [
+                      // Temperature unit indicator
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Chip(
+                            avatar: Icon(
+                              _isCelsius ? Icons.device_thermostat : Icons.thermostat_outlined,
+                              size: 18,
+                            ),
+                            label: Text(
+                              'Temperature in ${TemperatureUtils.getUnitName(_isCelsius)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
                       TextField(
                         controller: _cityController,
                         decoration: InputDecoration(
@@ -221,7 +271,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
-                                  '${_currentWeather!.main.temp.round()}°C',
+                                  TemperatureUtils.formatTemperature(_currentWeather!.main.temp, _isCelsius),
                                   style: const TextStyle(
                                     fontSize: 48,
                                     fontWeight: FontWeight.bold,
@@ -237,7 +287,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
-                                  'Feels like ${_currentWeather!.main.feelsLike.round()}°C',
+                                  'Feels like ${TemperatureUtils.formatTemperature(_currentWeather!.main.feelsLike, _isCelsius)}',
                                   style: const TextStyle(
                                     fontSize: 14,
                                     color: Colors.white70,
@@ -267,7 +317,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                 _buildDetailRow(
                                   Icons.thermostat,
                                   'Min/Max',
-                                  '${_currentWeather!.main.tempMin.round()}°C / ${_currentWeather!.main.tempMax.round()}°C',
+                                  '${TemperatureUtils.formatTemperature(_currentWeather!.main.tempMin, _isCelsius)} / ${TemperatureUtils.formatTemperature(_currentWeather!.main.tempMax, _isCelsius)}',
                                 ),
                                 _buildDetailRow(
                                   Icons.water_drop,

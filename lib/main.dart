@@ -8,8 +8,36 @@ void main() async {
   runApp(const WeatherApp());
 }
 
-class WeatherApp extends StatelessWidget {
+class WeatherApp extends StatefulWidget {
   const WeatherApp({super.key});
+
+  @override
+  State<WeatherApp> createState() => _WeatherAppState();
+}
+
+class _WeatherAppState extends State<WeatherApp> {
+  bool _isDarkMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemePreference();
+  }
+
+  _loadThemePreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDarkMode = prefs.getBool('isDarkMode') ?? false;
+    });
+  }
+
+  void toggleTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDarkMode = !_isDarkMode;
+    });
+    await prefs.setBool('isDarkMode', _isDarkMode);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,8 +46,18 @@ class WeatherApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
+        brightness: Brightness.light,
       ),
-      home: const AuthWrapper(),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+      ),
+      themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      home: AuthWrapper(onThemeToggle: toggleTheme, isDarkMode: _isDarkMode),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -27,7 +65,14 @@ class WeatherApp extends StatelessWidget {
 
 // Virtual Identity: Check if user is logged in
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key});
+  final VoidCallback onThemeToggle;
+  final bool isDarkMode;
+  
+  const AuthWrapper({
+    super.key,
+    required this.onThemeToggle,
+    required this.isDarkMode,
+  });
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
@@ -62,6 +107,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
     
-    return _isLoggedIn ? const WeatherScreen() : const LoginScreen();
+    return _isLoggedIn 
+        ? WeatherScreen(
+            onThemeToggle: widget.onThemeToggle,
+            isDarkMode: widget.isDarkMode,
+          )
+        : LoginScreen(
+            onThemeToggle: widget.onThemeToggle,
+            isDarkMode: widget.isDarkMode,
+          );
   }
 }

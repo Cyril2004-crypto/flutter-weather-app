@@ -4,7 +4,14 @@ import 'weather_screen.dart';
 
 // Theme 4: Virtual Identity - Login screen with local storage
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final VoidCallback onThemeToggle;
+  final bool isDarkMode;
+  
+  const LoginScreen({
+    super.key,
+    required this.onThemeToggle,
+    required this.isDarkMode,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -41,7 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
     // Navigate to weather screen
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const WeatherScreen()),
+        MaterialPageRoute(builder: (context) => WeatherScreen(
+          onThemeToggle: widget.onThemeToggle,
+          isDarkMode: widget.isDarkMode,
+        )),
       );
     }
   }
@@ -49,7 +59,17 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue.shade50,
+      appBar: AppBar(
+        title: const Text('Weather App Login'),
+        actions: [
+          // Theme toggle button
+          IconButton(
+            icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            onPressed: widget.onThemeToggle,
+            tooltip: widget.isDarkMode ? 'Light Mode' : 'Dark Mode',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20.0),
@@ -62,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Icon(
                   Icons.cloud,
                   size: 100,
-                  color: Colors.blue.shade600,
+                  color: Theme.of(context).primaryColor,
                 ),
                 const SizedBox(height: 20),
                 Text(
