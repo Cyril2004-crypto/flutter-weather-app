@@ -1,19 +1,18 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/weather_model.dart';
 import '../services/weather_service.dart';
-import '../utils/temperature_utils.dart';
-import 'login_screen.dart';
+import '../models/weather_model.dart';
 
-// Main Weather Screen with Event-Driven Programming
 class WeatherScreen extends StatefulWidget {
-  final VoidCallback onThemeToggle;
-  final bool isDarkMode;
-  
+  final String username;
+  final Future<void> Function() onLogout;
+  final VoidCallback toggleTheme;
+
   const WeatherScreen({
     super.key,
-    required this.onThemeToggle,
-    required this.isDarkMode,
+    required this.username,
+    required this.onLogout,
+    required this.toggleTheme,
   });
 
   @override
@@ -21,100 +20,65 @@ class WeatherScreen extends StatefulWidget {
 }
 
 class _WeatherScreenState extends State<WeatherScreen> {
-  final TextEditingController _cityController = TextEditingController();
-  final WeatherService _weatherService = WeatherService();
-  
-  WeatherModel? _currentWeather;
-  bool _isLoading = false;
-  String _errorMessage = '';
-  String _username = '';
-  String _savedCity = '';
-  bool _isCelsius = true; // Temperature unit preference
+  final WeatherService _service = WeatherService();
+  final TextEditingController _searchController = TextEditingController();
+  WeatherModel? _weather;
+  List<String> _favorites = [];
+  List<String> _history = [];
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadSavedLists();
   }
 
-  // Load user preferences (Virtual Identity)
-  _loadUserData() async {
+  Future<void> _loadSavedLists() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _username = prefs.getString('username') ?? 'User';
-      _savedCity = prefs.getString('preferredCity') ?? 'London';
-      _isCelsius = prefs.getBool('isCelsius') ?? true;
+      _favorites = prefs.getStringList('favorites') ?? [];
+      _history = prefs.getStringList('search_history') ?? [];
     });
-    
-    // Load weather for saved city
-    if (_savedCity.isNotEmpty) {
-      _cityController.text = _savedCity;
-      _searchWeather();
-    }
   }
 
-  // Theme 2: Event-Driven Programming - Search button event
-  _searchWeather() async {
-    if (_cityController.text.isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter a city name';
-      });
-      return;
-    }
+  Future<void> _saveFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('favorites', _favorites);
+  }
 
+  Future<void> _saveHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('search_history', _history);
+  }
+
+  Future<void> _toggleFavorite(String city) async {
     setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-
-    try {
-      // Theme 3: Interoperability - API call
-      final weather = await _weatherService.getWeatherByCity(_cityController.text);
-      
-      if (weather != null) {
-        setState(() {
-          _currentWeather = weather;
-          _isLoading = false;
-        });
-
-        // Save preferred city (Virtual Identity)
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('preferredCity', _cityController.text);
+      if (_favorites.contains(city)) {
+        _favorites.remove(city);
       } else {
-        setState(() {
-          _errorMessage = 'City not found. Please check the spelling.';
-          _isLoading = false;
-        });
+        _favorites.add(city);
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error fetching weather data: ';
-        _isLoading = false;
-      });
-    }
-  }
-
-  // Toggle temperature unit (°C ↔ °F)
-  _toggleTemperatureUnit() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isCelsius = !_isCelsius;
     });
-    await prefs.setBool('isCelsius', _isCelsius);
+    await _saveFavorites();
   }
 
-  // Logout function (Virtual Identity)
-  _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', false);
-    
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => LoginScreen(
-          onThemeToggle: widget.onThemeToggle,
-          isDarkMode: widget.isDarkMode,
-        )),
-      );
+  Future<void> _addToHistory(String city) async {
+    setState(() {
+      _history.remove(city);
+      _history.insert(0, city);
+      if (_history.length > 10) _history = _history.sublist(0, 10);
+    });
+    await _saveHistory();
+  }
+
+  Future<void> _searchWeather(String city) async {
+    final result = await _service.getWeatherByCity(city);
+    if (result != null) {
+      setState(() {
+        _weather = result;
+      });
+      await _addToHistory(city);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not fetch weather')));
     }
   }
 
@@ -122,293 +86,146 @@ class _WeatherScreenState extends State<WeatherScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Welcome, $_username'),
+        title: Text('Welcome, ${widget.username}'),
         actions: [
-          // Temperature unit toggle
           IconButton(
-            icon: Icon(_isCelsius ? Icons.device_thermostat : Icons.thermostat_outlined),
-            onPressed: _toggleTemperatureUnit,
-            tooltip: _isCelsius ? 'Switch to Fahrenheit' : 'Switch to Celsius',
+            icon: const Icon(Icons.favorite_border),
+            onPressed: () {
+              // optional: open favorites panel
+              showModalBottomSheet(
+                context: context,
+                builder: (_) => _buildFavoritesSheet(),
+              );
+            },
           ),
-          // Theme toggle
-          IconButton(
-            icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
-            onPressed: widget.onThemeToggle,
-            tooltip: widget.isDarkMode ? 'Light Mode' : 'Dark Mode',
-          ),
-          // Logout button
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
+            onPressed: () async {
+              await widget.onLogout();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.color_lens),
+            onPressed: widget.toggleTheme,
           ),
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            children: [
-              // Search Section (Event-Driven Programming)
-              Card(
-                elevation: 4,
-                child: Padding(
-                  padding: const EdgeInsets.all(15.0),
-                  child: Column(
-                    children: [
-                      // Temperature unit indicator
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Chip(
-                            avatar: Icon(
-                              _isCelsius ? Icons.device_thermostat : Icons.thermostat_outlined,
-                              size: 18,
-                            ),
-                            label: Text(
-                              'Temperature in ${TemperatureUtils.getUnitName(_isCelsius)}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _cityController,
-                        decoration: InputDecoration(
-                          labelText: 'Enter city name',
-                          prefixIcon: const Icon(Icons.location_city),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.search),
-                            onPressed: _searchWeather, // Event trigger
-                          ),
-                        ),
-                        onSubmitted: (_) => _searchWeather(), // Event trigger
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _isLoading ? null : _searchWeather,
-                          icon: const Icon(Icons.search),
-                          label: const Text('Search Weather'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade600,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Loading indicator
-              if (_isLoading)
-                const Center(
-                  child: CircularProgressIndicator(),
-                ),
-
-              // Error message
-              if (_errorMessage.isNotEmpty)
-                Card(
-                  color: Colors.red.shade100,
-                  child: Padding(
-                    padding: const EdgeInsets.all(15.0),
-                    child: Row(
-                      children: [
-                        Icon(Icons.error, color: Colors.red.shade600),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _errorMessage,
-                            style: TextStyle(color: Colors.red.shade600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Weather Display
-              if (_currentWeather != null && !_isLoading)
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            // Search field
+            Row(
+              children: [
                 Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        // Main weather card
-                        Card(
-                          elevation: 6,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              gradient: LinearGradient(
-                                colors: [Colors.blue.shade400, Colors.blue.shade600],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                            child: Column(
-                              children: [
-                                Text(
-                                  _currentWeather!.name,
-                                  style: const TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  TemperatureUtils.formatTemperature(_currentWeather!.main.temp, _isCelsius),
-                                  style: const TextStyle(
-                                    fontSize: 48,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  _currentWeather!.weather[0].description.toUpperCase(),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  'Feels like ${TemperatureUtils.formatTemperature(_currentWeather!.main.feelsLike, _isCelsius)}',
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 15),
-
-                        // Weather details
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(15),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Weather Details',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 15),
-                                _buildDetailRow(
-                                  Icons.thermostat,
-                                  'Min/Max',
-                                  '${TemperatureUtils.formatTemperature(_currentWeather!.main.tempMin, _isCelsius)} / ${TemperatureUtils.formatTemperature(_currentWeather!.main.tempMax, _isCelsius)}',
-                                ),
-                                _buildDetailRow(
-                                  Icons.water_drop,
-                                  'Humidity',
-                                  '${_currentWeather!.main.humidity}%',
-                                ),
-                                _buildDetailRow(
-                                  Icons.speed,
-                                  'Pressure',
-                                  '${_currentWeather!.main.pressure} hPa',
-                                ),
-                                _buildDetailRow(
-                                  Icons.air,
-                                  'Wind Speed',
-                                  '${_currentWeather!.wind.speed} m/s',
-                                ),
-                                _buildDetailRow(
-                                  Icons.cloud,
-                                  'Cloudiness',
-                                  '${_currentWeather!.clouds.all}%',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.location_city),
+                      hintText: 'Enter city name',
                     ),
+                    onSubmitted: (v) => _searchWeather(v.trim()),
                   ),
                 ),
-
-              // Instructions if no weather data
-              if (_currentWeather == null && !_isLoading && _errorMessage.isEmpty)
-                Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.wb_sunny,
-                          size: 80,
-                          color: Colors.blue.shade300,
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Search for a city to see weather data',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.blue.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {
+                    final city = _searchController.text.trim();
+                    if (city.isNotEmpty) _searchWeather(city);
+                  },
                 ),
-            ],
-          ),
+                IconButton(
+                  icon: Icon(_favorites.contains(_searchController.text.trim()) ? Icons.star : Icons.star_border),
+                  onPressed: () {
+                    final city = _searchController.text.trim();
+                    if (city.isNotEmpty) _toggleFavorite(city);
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Current weather display (reuse your existing UI; show temperature etc.)
+            if (_weather != null) ...[
+              Text('${_weather!.main.temp.round()}°C', style: Theme.of(context).textTheme.headlineLarge),
+              Text(_weather!.weather.first.description.toUpperCase()),
+            ] else
+              const SizedBox(),
+
+            const SizedBox(height: 12),
+
+            // Search history chips
+            if (_history.isNotEmpty) Align(alignment: Alignment.centerLeft, child: const Text('Search History')),
+            Wrap(
+              spacing: 8,
+              children: _history.map((c) {
+                return GestureDetector(
+                  onTap: () {
+                    _searchController.text = c;
+                    _searchWeather(c);
+                  },
+                  onLongPress: () async {
+                    setState(() {
+                      _history.remove(c);
+                    });
+                    await _saveHistory();
+                  },
+                  child: Chip(label: Text(c)),
+                );
+              }).toList(),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Favorites list
+            if (_favorites.isNotEmpty) Align(alignment: Alignment.centerLeft, child: const Text('Favorites')),
+            Wrap(
+              spacing: 8,
+              children: _favorites.map((c) {
+                return InputChip(
+                  label: Text(c),
+                  selected: false,
+                  onPressed: () {
+                    _searchController.text = c;
+                    _searchWeather(c);
+                  },
+                  onDeleted: () async {
+                    setState(() {
+                      _favorites.remove(c);
+                    });
+                    await _saveFavorites();
+                  },
+                );
+              }).toList(),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.blue.shade600),
-          const SizedBox(width: 15),
-          Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 16,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-            ),
-          ),
-        ],
-      ),
+  Widget _buildFavoritesSheet() {
+    return ListView(
+      padding: const EdgeInsets.all(8),
+      children: _favorites
+          .map((c) => ListTile(
+                title: Text(c),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: () async {
+                    setState(() => _favorites.remove(c));
+                    await _saveFavorites();
+                    Navigator.pop(context);
+                  },
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _searchController.text = c;
+                  _searchWeather(c);
+                },
+              ))
+          .toList(),
     );
-  }
-
-  @override
-  void dispose() {
-    _cityController.dispose();
-    super.dispose();
   }
 }
