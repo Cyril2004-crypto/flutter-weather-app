@@ -5,6 +5,7 @@ part 'weather_model.g.dart';
 @JsonSerializable()
 class WeatherModel {
   final String name;
+  final Coord coord;
   final Main main;
   final List<Weather> weather;
   final Wind wind;
@@ -12,6 +13,7 @@ class WeatherModel {
 
   WeatherModel({
     required this.name,
+    required this.coord,
     required this.main,
     required this.weather,
     required this.wind,
@@ -22,6 +24,20 @@ class WeatherModel {
       _$WeatherModelFromJson(json);
 
   Map<String, dynamic> toJson() => _$WeatherModelToJson(this);
+}
+
+@JsonSerializable()
+class Coord {
+  final double lat;
+  final double lon;
+
+  Coord({
+    required this.lat,
+    required this.lon,
+  });
+
+  factory Coord.fromJson(Map<String, dynamic> json) => _$CoordFromJson(json);
+  Map<String, dynamic> toJson() => _$CoordToJson(this);
 }
 
 @JsonSerializable()

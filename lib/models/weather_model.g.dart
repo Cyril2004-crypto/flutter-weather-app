@@ -8,6 +8,7 @@ part of 'weather_model.dart';
 
 WeatherModel _$WeatherModelFromJson(Map<String, dynamic> json) => WeatherModel(
       name: json['name'] as String,
+      coord: Coord.fromJson(json['coord'] as Map<String, dynamic>),
       main: Main.fromJson(json['main'] as Map<String, dynamic>),
       weather: (json['weather'] as List<dynamic>)
           .map((e) => Weather.fromJson(e as Map<String, dynamic>))
@@ -19,10 +20,21 @@ WeatherModel _$WeatherModelFromJson(Map<String, dynamic> json) => WeatherModel(
 Map<String, dynamic> _$WeatherModelToJson(WeatherModel instance) =>
     <String, dynamic>{
       'name': instance.name,
+      'coord': instance.coord,
       'main': instance.main,
       'weather': instance.weather,
       'wind': instance.wind,
       'clouds': instance.clouds,
+    };
+
+Coord _$CoordFromJson(Map<String, dynamic> json) => Coord(
+      lat: (json['lat'] as num).toDouble(),
+      lon: (json['lon'] as num).toDouble(),
+    );
+
+Map<String, dynamic> _$CoordToJson(Coord instance) => <String, dynamic>{
+      'lat': instance.lat,
+      'lon': instance.lon,
     };
 
 Main _$MainFromJson(Map<String, dynamic> json) => Main(

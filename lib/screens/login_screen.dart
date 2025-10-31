@@ -1,8 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'weather_screen.dart';
 
-// Theme 4: Virtual Identity - Login screen with local storage
 class LoginScreen extends StatefulWidget {
   final Future<void> Function(String username) onLogin;
   final bool isDarkMode;
@@ -19,8 +16,22 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _usernameController = TextEditingController();
+  late final AnimationController _animController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
 
   Future<void> _handleLogin() async {
     final username = _usernameController.text.trim();
@@ -29,36 +40,101 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     await widget.onLogin(username);
-    // Navigation is handled by main.dart (auth wrapper)
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Welcome,'),
-        actions: [
-          IconButton(
-            icon: Icon(widget.isDarkMode ? Icons.dark_mode : Icons.light_mode),
-            onPressed: widget.toggleTheme,
-          )
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(labelText: 'Enter username'),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: widget.isDarkMode
+                ? [Colors.indigo.shade900, Colors.blueGrey.shade900]
+                : [Colors.lightBlue.shade300, Colors.white],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ScaleTransition(
+                    scale: Tween(begin: 0.95, end: 1.05).animate(CurvedAnimation(parent: _animController, curve: Curves.easeInOut)),
+                    child: Container(
+                      width: 104,
+                      height: 104,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Colors.white.withOpacity(0.2), Colors.white.withOpacity(0.05)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 3)),
+                        ],
+                      ),
+                      child: Center(
+                        child: Icon(Icons.wb_sunny, size: 44, color: theme.colorScheme.primary),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text('Welcome,', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Text('Sign in to view personalized weather', style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor)),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _usernameController,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: widget.isDarkMode ? Colors.white12 : Colors.white,
+                      prefixIcon: const Icon(Icons.person),
+                      hintText: 'Enter username',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                    onSubmitted: (_) => _handleLogin(),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.login_outlined),
+                        label: const Text('Login'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          elevation: 6,
+                        ),
+                        onPressed: _handleLogin,
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        tooltip: 'Toggle theme',
+                        icon: Icon(widget.isDarkMode ? Icons.dark_mode : Icons.light_mode),
+                        onPressed: widget.toggleTheme,
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      final sample = 'cyril';
+                      _usernameController.text = sample;
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sample username filled')));
+                    },
+                    child: const Text('Try demo account'),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.login),
-              label: const Text('Login'),
-              onPressed: _handleLogin,
-            ),
-          ],
+          ),
         ),
       ),
     );

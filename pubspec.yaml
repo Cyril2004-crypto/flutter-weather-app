@@ -1,4 +1,4 @@
-﻿name: weather_app
+name: weather_app
 description: "A Flutter weather app with advanced features."
 publish_to: 'none'
 
@@ -29,8 +29,8 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   
   # For JSON code generation
-  json_serializable: ^6.7.1
-  build_runner: ^2.4.7
+  json_serializable: ^6.9.0
+  build_runner: ^2.4.13
 
 flutter:
   uses-material-design: true
