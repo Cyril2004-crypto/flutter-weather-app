@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/weather_service.dart';
 import '../models/weather_model.dart';
 import '../models/daily_summary.dart'; // <--- use DailySummary
+import 'guess_temp_game.dart';
 
 class WeatherScreen extends StatefulWidget {
   final String username;
@@ -128,6 +129,11 @@ class _WeatherScreenState extends State<WeatherScreen> {
           IconButton(
             icon: const Icon(Icons.color_lens, size: 20),
             onPressed: widget.toggleTheme,
+          ),
+          IconButton(
+            icon: const Icon(Icons.videogame_asset_outlined, size: 20),
+            tooltip: 'Play game',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GuessTempGame())),
           ),
         ],
       ),
