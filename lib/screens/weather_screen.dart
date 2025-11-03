@@ -2,7 +2,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/weather_service.dart';
 import '../models/weather_model.dart';
-import '../models/forecast_model.dart'; // new import
+import '../models/daily_summary.dart'; // <--- use DailySummary
 
 class WeatherScreen extends StatefulWidget {
   final String username;
@@ -24,7 +24,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   final WeatherService _service = WeatherService();
   final TextEditingController _searchController = TextEditingController();
   WeatherModel? _weather;
-  List<DailyForecast> _forecast = [];
+  List<DailySummary> _daily = [];
   List<String> _favorites = [];
   List<String> _history = [];
 
@@ -77,80 +77,91 @@ class _WeatherScreenState extends State<WeatherScreen> {
     if (result != null) {
       setState(() {
         _weather = result;
-        _forecast = [];
+        _daily = []; // clear previous aggregated forecast
       });
       await _addToHistory(city);
 
-      // fetch forecast by coordinates if available
+      // fetch 5-day aggregated forecast (uses /data/2.5/forecast)
       try {
-        final lat = _weather!.coord.lat;
-        final lon = _weather!.coord.lon;
-        final fc = await _service.get10DayForecast(lat, lon);
-        setState(() => _forecast = fc);
+        final agg = await _service.get5DayAggregated(city);
+        setState(() => _daily = agg);
       } catch (e) {
-        // ignore missing coord
+        // ignore forecast errors
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not fetch weather')));
     }
   }
 
-  String _formatDate(int ts) {
-    final dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
-    return '${dt.month}/${dt.day}';
+  String _formatDateFromDate(DateTime d) {
+    return '${d.month}/${d.day}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // smaller bottomPad to avoid overflow; keeps keyboard inset if present
+    // use only viewInsets bottom plus a small margin (avoid double-counting safe area)
+    final double bottomPad = MediaQuery.of(context).viewInsets.bottom + 8;
+
+    // adaptively tighten some sizes on short windows
+    final double availHeight = MediaQuery.of(context).size.height;
+    final bool compact = availHeight < 700;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Welcome, ${widget.username}'),
+        toolbarHeight: compact ? 44 : 48, // slightly smaller on compact
+        title: Text('Welcome, ${widget.username}', style: TextStyle(fontSize: compact ? 16 : 18)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.favorite_border),
-            onPressed: () {
-              showModalBottomSheet(context: context, builder: (_) => _buildFavoritesSheet());
-            },
+            icon: const Icon(Icons.favorite_border, size: 20),
+            onPressed: () => showModalBottomSheet(context: context, builder: (_) => _buildFavoritesSheet()),
           ),
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await widget.onLogout();
-            },
+            icon: const Icon(Icons.logout, size: 20),
+            onPressed: () async => await widget.onLogout(),
           ),
           IconButton(
-            icon: const Icon(Icons.color_lens),
+            icon: const Icon(Icons.color_lens, size: 20),
             onPressed: widget.toggleTheme,
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+      body: SafeArea(
+        // ListView handles available viewport better and prevents bottom overflow
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(8, 6, 8, bottomPad),
           children: [
-            // Search field
+            // SEARCH ROW (more compact)
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.location_city),
-                      hintText: 'Enter city name',
-                      border: OutlineInputBorder(),
+                  child: SizedBox(
+                    height: compact ? 28 : 32,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.location_city, size: 16),
+                        hintText: 'City name',
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                        border: OutlineInputBorder(),
+                      ),
+                      onSubmitted: (v) => _searchWeather(v.trim()),
                     ),
-                    onSubmitted: (v) => _searchWeather(v.trim()),
                   ),
                 ),
+                const SizedBox(width: 6),
                 IconButton(
-                  icon: const Icon(Icons.search),
+                  icon: const Icon(Icons.search, size: 20),
                   onPressed: () {
                     final city = _searchController.text.trim();
                     if (city.isNotEmpty) _searchWeather(city);
                   },
                 ),
                 IconButton(
-                  icon: Icon(_favorites.contains(_searchController.text.trim()) ? Icons.star : Icons.star_border),
+                  icon: Icon(_favorites.contains(_searchController.text.trim()) ? Icons.star : Icons.star_border, size: 20),
                   onPressed: () {
                     final city = _searchController.text.trim();
                     if (city.isNotEmpty) _toggleFavorite(city);
@@ -159,148 +170,105 @@ class _WeatherScreenState extends State<WeatherScreen> {
               ],
             ),
 
-            const SizedBox(height: 18),
+            const SizedBox(height: 6),
 
-            // Current weather display and details
+            // CURRENT WEATHER (compact)
             if (_weather != null) ...[
-              Text('${_weather!.main.temp.round()}°C', style: Theme.of(context).textTheme.displaySmall),
-              Text(_weather!.weather.first.description.toUpperCase(), style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _statItem(Icons.thermostat, 'Min/Max', '${_weather!.main.tempMin.round()}°C / ${_weather!.main.tempMax.round()}°C'),
-                      _statItem(Icons.water_drop, 'Humidity', '${_weather!.main.humidity}%'),
-                      _statItem(Icons.compress, 'Pressure', '${_weather!.main.pressure} hPa'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _statItem(Icons.air, 'Wind', '${_weather!.wind.speed} m/s'),
-                      _statItem(Icons.cloud, 'Clouds', '${_weather!.clouds.all}%'),
-                      _statItem(Icons.location_on, 'Coords', '${_weather!.coord.lat.toStringAsFixed(2)}, ${_weather!.coord.lon.toStringAsFixed(2)}'),
-                    ],
-                  ),
-                ),
-              ),
-            ] else
-              const SizedBox(),
+              Text('${_weather!.main.temp.round()}°C',
+                  style: theme.textTheme.headlineMedium?.copyWith(fontSize: compact ? 20 : 24)),
+              const SizedBox(height: 2),
+              Text(_weather!.weather.first.description.toUpperCase(), style: theme.textTheme.bodySmall),
+              const SizedBox(height: 6),
 
-            const SizedBox(height: 14),
-
-            // Forecast horizontal list
-            if (_forecast.isNotEmpty) ...[
-              Align(alignment: Alignment.centerLeft, child: const Text('10-day Forecast', style: TextStyle(fontWeight: FontWeight.w600))),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 140,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _forecast.length,
-                  itemBuilder: (context, i) {
-                    final day = _forecast[i];
-                    final iconUrl = 'https://openweathermap.org/img/wn/${day.icon}@2x.png';
-                    return Container(
-                      width: 120,
-                      margin: const EdgeInsets.only(right: 10),
-                      child: Card(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(_formatDate(day.dt), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 6),
-                              Image.network(iconUrl, width: 48, height: 48, errorBuilder: (_, __, ___) => const Icon(Icons.cloud)),
-                              const SizedBox(height: 4),
-                              Text('${day.tempDay.round()}°C'),
-                              const SizedBox(height: 4),
-                              Text(day.description, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+              // compact stats grid (3 columns) — denser
+              GridView.count(
+                crossAxisCount: 3,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 0, // tighten rows
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: compact ? 4.5 : 4.2, // increase ratio to reduce cell height
+                children: [
+                  _smallStat(Icons.thermostat, 'Min/Max', '${_weather!.main.tempMin.round()}° / ${_weather!.main.tempMax.round()}°'),
+                  _smallStat(Icons.water_drop, 'Humidity', '${_weather!.main.humidity}%'),
+                  _smallStat(Icons.compress, 'Pressure', '${_weather!.main.pressure} hPa'),
+                  _smallStat(Icons.air, 'Wind', '${_weather!.wind.speed} m/s'),
+                  _smallStat(Icons.cloud, 'Clouds', '${_weather!.clouds.all}%'),
+                  _smallStat(Icons.location_on, 'Coords', '${_weather!.coord.lat.toStringAsFixed(2)}, ${_weather!.coord.lon.toStringAsFixed(2)}'),
+                ],
               ),
+              const SizedBox(height: 4),
             ],
 
+            // FORECAST — collapsed summary (tap to expand)
+            if (_daily.isNotEmpty)
+              ExpansionTile(
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('5-day Forecast', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text('${_daily.length} days', style: theme.textTheme.bodySmall),
+                  ],
+                ),
+                initiallyExpanded: false,
+                dense: true,
+                childrenPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                children: _daily.map((day) {
+                  final iconUrl = day.icon.isNotEmpty ? 'https://openweathermap.org/img/wn/${day.icon}@2x.png' : null;
+                  return ListTile(
+                    leading: iconUrl != null
+                        ? Image.network(iconUrl, width: compact ? 28 : 36, height: compact ? 28 : 36, errorBuilder: (_, __, ___) => const Icon(Icons.cloud))
+                        : const Icon(Icons.cloud),
+                    title: Text(_formatDateFromDate(day.date), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text('${day.avgTemp.round()}° — ${day.description}'),
+                    dense: true,
+                    visualDensity: compact ? VisualDensity.compact : VisualDensity.standard,
+                  );
+                }).toList(),
+              ),
+
+            // COLLAPSIBLE LISTS — keep dense and collapsed
+            const SizedBox(height: 6),
+            ExpansionTile(
+              title: Text('Search History (${_history.length})'),
+              initiallyExpanded: false,
+              dense: true,
+              childrenPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              children: [
+                Wrap(spacing: 6, runSpacing: 6, children: _history.map((c) => ActionChip(label: Text(c), onPressed: () { _searchController.text = c; _searchWeather(c); })).toList()),
+              ],
+            ),
+            ExpansionTile(
+              title: Text('Favorites (${_favorites.length})'),
+              initiallyExpanded: false,
+              dense: true,
+              childrenPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              children: [
+                Wrap(spacing: 6, runSpacing: 6, children: _favorites.map((c) => InputChip(
+                  label: Text(c, style: const TextStyle(fontSize: 12)),
+                  onPressed: () { _searchController.text = c; _searchWeather(c); },
+                  onDeleted: () async { setState(() => _favorites.remove(c)); await _saveFavorites(); },
+                )).toList()),
+              ],
+            ),
+
+            // minimal bottom spacing (removed large spacer)
             const SizedBox(height: 8),
-
-            // Search history chips
-            if (_history.isNotEmpty) Align(alignment: Alignment.centerLeft, child: const Text('Search History')),
-            Wrap(
-              spacing: 8,
-              children: _history.map((c) {
-                return GestureDetector(
-                  onTap: () {
-                    _searchController.text = c;
-                    _searchWeather(c);
-                  },
-                  onLongPress: () async {
-                    setState(() {
-                      _history.remove(c);
-                    });
-                    await _saveHistory();
-                  },
-                  child: Chip(label: Text(c)),
-                );
-              }).toList(),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Favorites list
-            if (_favorites.isNotEmpty) Align(alignment: Alignment.centerLeft, child: const Text('Favorites')),
-            Wrap(
-              spacing: 8,
-              children: _favorites.map((c) {
-                return InputChip(
-                  label: Text(c),
-                  selected: false,
-                  onPressed: () {
-                    _searchController.text = c;
-                    _searchWeather(c);
-                  },
-                  onDeleted: () async {
-                    setState(() {
-                      _favorites.remove(c);
-                    });
-                    await _saveFavorites();
-                  },
-                );
-              }).toList(),
-            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _statItem(IconData icon, String title, String value) {
+  Widget _smallStat(IconData icon, String title, String value) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 22, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 6),
-        Text(title, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(height: 1),
+        Text(title, style: const TextStyle(fontSize: 10, color: Colors.black54)),
+        const SizedBox(height: 1),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
       ],
     );
   }
