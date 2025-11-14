@@ -4,6 +4,8 @@ import '../services/weather_service.dart';
 import '../models/weather_model.dart';
 import '../models/daily_summary.dart'; // <--- use DailySummary
 import 'guess_temp_game.dart';
+import 'city_comparison.dart';
+import 'map_view.dart';
 
 class WeatherScreen extends StatefulWidget {
   final String username;
@@ -134,6 +136,16 @@ class _WeatherScreenState extends State<WeatherScreen> {
             icon: const Icon(Icons.videogame_asset_outlined, size: 20),
             tooltip: 'Play game',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GuessTempGame())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.map_outlined, size: 20),
+            tooltip: 'Map',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MapViewScreen())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.compare_arrows, size: 20),
+            tooltip: 'Compare cities',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CityComparison())),
           ),
         ],
       ),

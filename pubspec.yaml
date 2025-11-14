@@ -14,13 +14,16 @@ dependencies:
   cupertino_icons: ^1.0.8
   
   # HTTP package for API calls (Interoperability)
-  http: ^1.1.0
+  http: ^0.13.0
   
   # Shared preferences for local storage (Virtual Identity)
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.0.0
   
   # For JSON serialization
   json_annotation: ^4.8.1
+
+  flutter_map: ^4.0.0
+  latlong2: ^0.8.1
 
 dev_dependencies:
   flutter_test:
