@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import 'package:geolocator/geolocator.dart';
 import '../services/weather_service.dart';
 import '../models/weather_model.dart';
 
@@ -30,7 +32,8 @@ class _MapViewScreenState extends State<MapViewScreen> {
     });
     final prefs = await SharedPreferences.getInstance();
     final favorites = prefs.getStringList('favorites') ?? [];
-    final List<Future<void>> jobs = favorites.map((c) async {
+
+    final jobs = favorites.map((c) async {
       final w = await _service.getWeatherByCity(c);
       if (w != null) {
         final lat = w.coord.lat;
@@ -46,6 +49,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
         ));
       }
     }).toList();
+
     await Future.wait(jobs);
     setState(() {
       _loading = false;
@@ -72,6 +76,21 @@ class _MapViewScreenState extends State<MapViewScreen> {
     );
   }
 
+  Future<void> _centerOnUser() async {
+    try {
+      LocationPermission p = await Geolocator.checkPermission();
+      if (p == LocationPermission.denied) p = await Geolocator.requestPermission();
+      if (p == LocationPermission.denied || p == LocationPermission.deniedForever) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permission denied')));
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+      _mapController.move(LatLng(pos.latitude, pos.longitude), 10);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not get location')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,12 +99,54 @@ class _MapViewScreenState extends State<MapViewScreen> {
           ? const Center(child: CircularProgressIndicator())
           : FlutterMap(
               mapController: _mapController,
-              options: MapOptions(center: _markers.isNotEmpty ? _markers.first.point : LatLng(0, 0), zoom: 4),
+              options: MapOptions(
+                center: _markers.isNotEmpty ? _markers.first.point : LatLng(0, 0),
+                zoom: 4,
+                onTap: (_, __) {}, // no-op; marker taps handle showing info
+              ),
               children: [
                 TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
-                MarkerLayer(markers: _markers),
+                MarkerClusterLayerWidget(
+                  options: MarkerClusterLayerOptions(
+                    maxClusterRadius: 45,
+                    size: const Size(40, 40),
+                    anchor: AnchorPos.align(AnchorAlign.center),
+                    fitBoundsOptions: const FitBoundsOptions(padding: EdgeInsets.all(50)),
+                    markers: _markers,
+                    showPolygon: false,
+                    // omitted popupOptions (requires popupState). Marker tap opens bottom sheet instead.
+                    builder: (context, markers) {
+                      return Container(
+                        alignment: Alignment.center,
+                        decoration:
+                            BoxDecoration(color: Colors.blue.withOpacity(0.8), shape: BoxShape.circle),
+                        child: Text('${markers.length}', style: const TextStyle(color: Colors.white)),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            heroTag: 'loc',
+            mini: true,
+            onPressed: _centerOnUser,
+            tooltip: 'Center on my location',
+            child: const Icon(Icons.my_location),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton(
+            heroTag: 'refresh',
+            mini: true,
+            onPressed: _loadMarkers,
+            tooltip: 'Refresh markers',
+            child: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
     );
   }
 }

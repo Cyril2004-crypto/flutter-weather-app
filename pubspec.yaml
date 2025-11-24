@@ -13,8 +13,8 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   
-  # HTTP package for API calls (Interoperability)
-  http: ^0.13.0
+  # HTTP package for API calls (must match flutter_map's constraint)
+  http: ^0.13.5
   
   # Shared preferences for local storage (Virtual Identity)
   shared_preferences: ^2.0.0
@@ -24,6 +24,8 @@ dependencies:
 
   flutter_map: ^4.0.0
   latlong2: ^0.8.1
+  flutter_map_marker_cluster: ^1.0.0
+  geolocator: ^9.0.0
 
 dev_dependencies:
   flutter_test:

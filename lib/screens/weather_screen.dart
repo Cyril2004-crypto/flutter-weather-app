@@ -26,6 +26,7 @@ class WeatherScreen extends StatefulWidget {
 class _WeatherScreenState extends State<WeatherScreen> {
   final WeatherService _service = WeatherService();
   final TextEditingController _searchController = TextEditingController();
+  List<String> _searchSuggestions = [];
   WeatherModel? _weather;
   List<DailySummary> _daily = [];
   List<String> _favorites = [];
@@ -98,6 +99,18 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
   String _formatDateFromDate(DateTime d) {
     return '${d.month}/${d.day}';
+  }
+
+  Future<void> _updateSearchSuggestions(String q) async {
+    if (q.trim().isEmpty) { setState(() => _searchSuggestions = []); return; }
+    final s = await _service.getCitySuggestions(q);
+    setState(() => _searchSuggestions = s);
+  }
+
+  void _applySearchSuggestion(String s) {
+    _searchController.text = s;
+    setState(() => _searchSuggestions = []);
+    _searchWeather(s);
   }
 
   @override
@@ -177,6 +190,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                           contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                           border: OutlineInputBorder(),
                         ),
+                        onChanged: (v) => _updateSearchSuggestions(v),
                         onSubmitted: (v) => _searchWeather(v.trim()),
                       ),
                     ),
@@ -200,6 +214,20 @@ class _WeatherScreenState extends State<WeatherScreen> {
               ),
 
               const SizedBox(height: 6),
+
+              // suggestions for search (show small chips)
+              if (_searchSuggestions.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _searchSuggestions.map((s) => ActionChip(
+                      label: Text(s, style: const TextStyle(fontSize: 12)),
+                      onPressed: () => _applySearchSuggestion(s),
+                    )).toList(),
+                  ),
+                ),
 
               // CURRENT WEATHER (compact)
               if (_weather != null) ...[

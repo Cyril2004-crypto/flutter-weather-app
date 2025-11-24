@@ -18,24 +18,32 @@ class _CityComparisonState extends State<CityComparison> {
   WeatherModel? _bWeather;
   bool _loading = false;
 
+  List<String> _aSuggestions = [];
+  List<String> _bSuggestions = [];
+
   Future<void> _compare() async {
     final a = _aCtrl.text.trim();
     final b = _bCtrl.text.trim();
     if (a.isEmpty || b.isEmpty) return;
-    setState(() {
-      _loading = true;
-      _aWeather = null;
-      _bWeather = null;
-    });
-    final res = await Future.wait([
-      _service.getWeatherByCity(a),
-      _service.getWeatherByCity(b),
-    ]);
+    setState(() { _loading = true; _aWeather = null; _bWeather = null; });
+    final res = await Future.wait([_service.getWeatherByCity(a), _service.getWeatherByCity(b)]);
     setState(() {
       _aWeather = res[0];
       _bWeather = res[1];
       _loading = false;
     });
+  }
+
+  Future<void> _updateASuggestions(String q) async {
+    if (q.trim().isEmpty) { setState(() => _aSuggestions = []); return; }
+    final s = await _service.getCitySuggestions(q);
+    setState(() => _aSuggestions = s);
+  }
+
+  Future<void> _updateBSuggestions(String q) async {
+    if (q.trim().isEmpty) { setState(() => _bSuggestions = []); return; }
+    final s = await _service.getCitySuggestions(q);
+    setState(() => _bSuggestions = s);
   }
 
   Widget _cardFor(WeatherModel? w, String label) {
@@ -75,10 +83,59 @@ class _CityComparisonState extends State<CityComparison> {
       body: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(children: [
+          // inputs + suggestions
           Row(children: [
-            Expanded(child: TextField(controller: _aCtrl, decoration: const InputDecoration(labelText: 'City A'))),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _aCtrl,
+                    decoration: const InputDecoration(labelText: 'City A'),
+                    onChanged: (v) => _updateASuggestions(v),
+                    onSubmitted: (_) => _updateASuggestions(_aCtrl.text),
+                  ),
+                  if (_aSuggestions.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _aSuggestions.map((s) => ActionChip(
+                          label: Text(s, style: const TextStyle(fontSize: 12)),
+                          onPressed: () { _aCtrl.text = s; setState(() => _aSuggestions = []); },
+                        )).toList(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
             const SizedBox(width: 8),
-            Expanded(child: TextField(controller: _bCtrl, decoration: const InputDecoration(labelText: 'City B'))),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _bCtrl,
+                    decoration: const InputDecoration(labelText: 'City B'),
+                    onChanged: (v) => _updateBSuggestions(v),
+                    onSubmitted: (_) => _updateBSuggestions(_bCtrl.text),
+                  ),
+                  if (_bSuggestions.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: _bSuggestions.map((s) => ActionChip(
+                          label: Text(s, style: const TextStyle(fontSize: 12)),
+                          onPressed: () { _bCtrl.text = s; setState(() => _bSuggestions = []); },
+                        )).toList(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
             const SizedBox(width: 8),
             ElevatedButton(onPressed: _loading ? null : _compare, child: _loading ? const SizedBox(width:16,height:16,child:CircularProgressIndicator(strokeWidth:2)) : const Text('Compare')),
           ]),
