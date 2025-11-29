@@ -32,28 +32,45 @@ class _WeatherScreenState extends State<WeatherScreen> {
   List<String> _favorites = [];
   List<String> _history = [];
 
+  // helper to namespace prefs keys per user
+  String _favKey(String user) => 'favorites_$user';
+  String _historyKey(String user) => 'history_$user';
+
+  // load per-user local data
+  Future<void> _loadLocalDataForUser() async {
+    final user = (widget.username).trim();
+    final prefs = await SharedPreferences.getInstance();
+    _favorites = prefs.getStringList(_favKey(user)) ?? [];
+    _history = prefs.getStringList(_historyKey(user)) ?? [];
+    setState(() {});
+  }
+
+  // persist favorites for current user
+  Future<void> _saveFavoritesForUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_favKey(widget.username), _favorites);
+  }
+
+  // persist history for current user
+  Future<void> _saveHistoryForUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_historyKey(widget.username), _history);
+  }
+
   @override
   void initState() {
     super.initState();
-    _loadSavedLists();
+    // load per-user favorites/history for the current user
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadLocalDataForUser());
   }
 
-  Future<void> _loadSavedLists() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _favorites = prefs.getStringList('favorites') ?? [];
-      _history = prefs.getStringList('search_history') ?? [];
-    });
-  }
-
-  Future<void> _saveFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('favorites', _favorites);
-  }
-
-  Future<void> _saveHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('search_history', _history);
+  @override
+  void didUpdateWidget(covariant WeatherScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // if logged-in user changed, reload namespaced lists
+    if (oldWidget.username != widget.username) {
+      _loadLocalDataForUser();
+    }
   }
 
   Future<void> _toggleFavorite(String city) async {
@@ -61,10 +78,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
       if (_favorites.contains(city)) {
         _favorites.remove(city);
       } else {
-        _favorites.add(city);
+        // insert at top for quick access
+        _favorites.remove(city);
+        _favorites.insert(0, city);
       }
     });
-    await _saveFavorites();
+    await _saveFavoritesForUser();
   }
 
   Future<void> _addToHistory(String city) async {
@@ -73,7 +92,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
       _history.insert(0, city);
       if (_history.length > 10) _history = _history.sublist(0, 10);
     });
-    await _saveHistory();
+    await _saveHistoryForUser();
   }
 
   Future<void> _searchWeather(String city) async {
@@ -324,11 +343,18 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 dense: true,
                 childrenPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 children: [
-                  Wrap(spacing: 6, runSpacing: 6, children: _favorites.map((c) => InputChip(
-                    label: Text(c, style: const TextStyle(fontSize: 12)),
-                    onPressed: () { _searchController.text = c; _searchWeather(c); },
-                    onDeleted: () async { setState(() => _favorites.remove(c)); await _saveFavorites(); },
-                  )).toList()),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _favorites.map((c) => InputChip(
+                      label: Text(c, style: const TextStyle(fontSize: 12)),
+                      onPressed: () { _searchController.text = c; _searchWeather(c); },
+                      onDeleted: () async {
+                        setState(() => _favorites.remove(c));
+                        await _saveFavoritesForUser();
+                      },
+                    )).toList(),
+                  ),
                 ],
               ),
 
@@ -395,7 +421,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                   icon: const Icon(Icons.delete),
                   onPressed: () async {
                     setState(() => _favorites.remove(c));
-                    await _saveFavorites();
+                    await _saveFavoritesForUser();
                     Navigator.pop(context);
                   },
                 ),

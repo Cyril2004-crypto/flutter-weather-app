@@ -19,6 +19,12 @@ class _MapViewScreenState extends State<MapViewScreen> {
   List<Marker> _markers = [];
   bool _loading = true;
 
+  final String _owmKey = '085e22f212b11b6c58a6fa2043817cc5'; // or store in WeatherService
+
+  double _overlayOpacity = 0.6;
+  bool _showPrecip = true;
+  bool _showClouds = false;
+
   @override
   void initState() {
     super.initState();
@@ -95,38 +101,68 @@ class _MapViewScreenState extends State<MapViewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Map View')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                center: _markers.isNotEmpty ? _markers.first.point : LatLng(0, 0),
-                zoom: 4,
-                onTap: (_, __) {}, // no-op; marker taps handle showing info
-              ),
-              children: [
-                TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
-                MarkerClusterLayerWidget(
-                  options: MarkerClusterLayerOptions(
-                    maxClusterRadius: 45,
-                    size: const Size(40, 40),
-                    anchor: AnchorPos.align(AnchorAlign.center),
-                    fitBoundsOptions: const FitBoundsOptions(padding: EdgeInsets.all(50)),
-                    markers: _markers,
-                    showPolygon: false,
-                    // omitted popupOptions (requires popupState). Marker tap opens bottom sheet instead.
-                    builder: (context, markers) {
-                      return Container(
-                        alignment: Alignment.center,
-                        decoration:
-                            BoxDecoration(color: Colors.blue.withOpacity(0.8), shape: BoxShape.circle),
-                        child: Text('${markers.length}', style: const TextStyle(color: Colors.white)),
-                      );
-                    },
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(center: _markers.isNotEmpty ? _markers.first.point : LatLng(0, 0), zoom: 4),
+            children: [
+              TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+              if (_showPrecip)
+                Opacity(
+                  opacity: _overlayOpacity,
+                  child: TileLayer(
+                    urlTemplate: 'https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=$_owmKey',
+                    tileProvider: NetworkTileProvider(),
                   ),
+                ),
+              if (_showClouds)
+                Opacity(
+                  opacity: _overlayOpacity,
+                  child: TileLayer(
+                    urlTemplate: 'https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=$_owmKey',
+                    tileProvider: NetworkTileProvider(),
+                  ),
+                ),
+              MarkerLayer(markers: _markers),
+            ],
+          ),
+          Positioned(
+            right: 12,
+            top: 80,
+            child: Column(
+              children: [
+                FloatingActionButton(
+                  mini: true,
+                  onPressed: () => setState(() => _showPrecip = !_showPrecip),
+                  child: Icon(_showPrecip ? Icons.opacity : Icons.opacity_outlined),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton(
+                  mini: true,
+                  onPressed: () => setState(() => _showClouds = !_showClouds),
+                  child: Icon(_showClouds ? Icons.cloud : Icons.cloud_outlined),
+                ),
+                const SizedBox(height: 8),
+                // opacity slider popup
+                FloatingActionButton(
+                  mini: true,
+                  onPressed: () => showModalBottomSheet(context: context, builder: (_) {
+                    return Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Text('Overlay opacity'),
+                        Slider(value: _overlayOpacity, onChanged: (v) => setState(() => _overlayOpacity = v), min: 0.0, max: 1.0),
+                      ]),
+                    );
+                  }),
+                  child: const Icon(Icons.tune),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
